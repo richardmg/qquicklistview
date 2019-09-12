@@ -56,6 +56,8 @@
 
 QT_BEGIN_NAMESPACE
 
+Q_LOGGING_CATEGORY(lcItemViewDelegateRecycling, "qt.quick.itemview.delegaterecycling")
+
 class QQmlDelegateModelItem;
 
 namespace QV4 {
@@ -3424,6 +3426,104 @@ void QQmlPartsModel::emitModelUpdated(const QQmlChangeSet &changeSet, bool reset
             emit initItem(index, package->part(m_part));
         model->release(object);
     }
+}
+
+void QQmlReuseableDelegateModelItemsPool::insertItem(QQmlDelegateModelItem *modelItem)
+{
+    // Currently, the only way for a view to reuse items is to call release() in the model class
+    // with the second argument explicitly set to QQmlReuseableDelegateModelItemsPool::Reusable.
+    // If the released item is no longer referenced, it will be added to the pool. Reusing of items
+    // can be specified per item, in case certain items cannot be recycled.
+    // A QQmlDelegateModelItem knows which delegate its object was created from. So when we are
+    // about to create a new item, we first check if the pool contains an item based on the same
+    // delegate from before. If so, we take it out of the pool (instead of creating a new item), and
+    // update all its context-, and attached properties.
+    // When a view is recycling items, it should call drain() regularly. As there is currently
+    // no logic to 'hibernate' items in the pool, they are only
+    // meant to rest there for a short while, ideally only from the time e.g a row is unloaded
+    // on one side of the view, and until a new row is loaded on the opposite side. In-between
+    // this time, the application will see the item as fully functional and 'alive' (just not
+    // visible on screen). Since this time is supposed to be short, we don't take any action to
+    // notify the application about it, since we don't want to trigger any bindings that can
+    // disturb performance.
+    // A recommended time for calling drain() is each time a view has finished
+    // loading e.g a new row or column. If there are more items in the pool after that, it means
+    // that the view most likely doesn't need them anytime soon. Those items should be destroyed to
+    // not consume resources.
+    // Depending on if a view is a list or a table, it can sometimes be performant to keep
+    // items in the pool for a bit longer than one "row out/row in" cycle. E.g for a table, if the
+    // number of visible rows in a view is much larger than the number of visible columns.
+    // In that case, if you flick out a row, and then flick in a column, you would throw away a lot
+    // of items in the pool if completely draining it. The reason is that unloading a row places more
+    // items in the pool than what ends up being recycled when loading a new column. And then, when you
+    // next flick in a new row, you would need to load all those drained items again from scratch. For
+    // that reason, you can specify a maxPoolTime to the drainReusableItemsPool() that allows you to keep
+    // items in the pool for a bit longer, effectively keeping more items in circulation.
+    // A recommended maxPoolTime would be equal to the number of dimenstions in the view, which
+    // means 1 for a list view and 2 for a table view. If you specify 0, all items will be drained.
+    Q_ASSERT(!modelItem->incubationTask);
+    Q_ASSERT(!modelItem->isObjectReferenced());
+    Q_ASSERT(modelItem->object);
+
+    modelItem->poolTime = 0;
+    m_reusableItemsPool.append(modelItem);
+
+    qCDebug(lcItemViewDelegateRecycling)
+            << "item:" << modelItem
+            << "index:" << modelItem->modelIndex()
+            << "row:" << modelItem->modelRow()
+            << "column:" << modelItem->modelColumn()
+            << "new pool size:" << m_reusableItemsPool.size();
+}
+
+QQmlDelegateModelItem *QQmlReuseableDelegateModelItemsPool::takeItem(const QQmlComponent *delegate)
+{
+    // Find the oldest item in the pool that was made from the same delegate as
+    // the given argument, remove it from the pool, and return it.
+    if (m_reusableItemsPool.isEmpty())
+        return nullptr;
+
+    for (auto it = m_reusableItemsPool.begin(); it != m_reusableItemsPool.end(); ++it) {
+        if ((*it)->delegate != delegate)
+            continue;
+        auto modelItem = *it;
+        m_reusableItemsPool.erase(it);
+
+        qCDebug(lcItemViewDelegateRecycling)
+                << "item:" << modelItem
+                << "index:" << modelItem->modelIndex()
+                << "row:" << modelItem->modelRow()
+                << "column:" << modelItem->modelColumn()
+                << "new pool size:" << m_reusableItemsPool.size();
+
+        return modelItem;
+    }
+
+    return nullptr;
+}
+
+void QQmlReuseableDelegateModelItemsPool::drain(int maxPoolTime, std::function<void(QObject *)> releaseItem)
+{
+    // Rather than releasing all pooled items upon a call to this function, each
+    // item has a poolTime. The poolTime specifies for how many loading cycles an item
+    // has been resting in the pool. And for each invocation of this function, poolTime
+    // will increase. If poolTime is equal to, or exceeds, maxPoolTime, it will be removed
+    // from the pool and released. This way, the view can tweak a bit for how long
+    // items should stay in "circulation", even if they are not recycled right away.
+    qCDebug(lcItemViewDelegateRecycling) << "pool size before drain:" << m_reusableItemsPool.size();
+
+    for (auto it = m_reusableItemsPool.begin(); it != m_reusableItemsPool.end();) {
+        auto modelItem = *it;
+        modelItem->poolTime++;
+        if (modelItem->poolTime <= maxPoolTime) {
+            ++it;
+        } else {
+            it = m_reusableItemsPool.erase(it);
+            releaseItem(modelItem->object);
+        }
+    }
+
+    qCDebug(lcItemViewDelegateRecycling) << "pool size after drain:" << m_reusableItemsPool.size();
 }
 
 //============================================================================

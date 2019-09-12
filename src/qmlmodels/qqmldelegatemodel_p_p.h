@@ -64,6 +64,8 @@ QT_REQUIRE_CONFIG(qml_delegate_model);
 
 QT_BEGIN_NAMESPACE
 
+Q_DECLARE_LOGGING_CATEGORY(lcItemViewDelegateRecycling)
+
 typedef QQmlListCompositor Compositor;
 
 class QQmlDelegateModelAttachedMetaObject;
@@ -190,7 +192,18 @@ void QV4::Heap::QQmlDelegateModelItemObject::init(QQmlDelegateModelItem *item)
     this->item = item;
 }
 
+class QQmlReuseableDelegateModelItemsPool
+{
+public:
+    void insertItem(QQmlDelegateModelItem *modelItem);
+    QQmlDelegateModelItem *takeItem(const QQmlComponent *delegate);
+    void reuseItem(QQmlDelegateModelItem *item, int newModelIndex);
+    void drain(int maxPoolTime, std::function<void(QObject *)> releaseItem);
+    int size() { return m_reusableItemsPool.size(); }
 
+private:
+    QList<QQmlDelegateModelItem *> m_reusableItemsPool;
+};
 
 class QQmlDelegateModelPrivate;
 class QQDMIncubationTask : public QQmlIncubator
