@@ -208,6 +208,9 @@ QQmlDelegateModelPrivate::~QQmlDelegateModelPrivate()
 {
     qDeleteAll(m_finishedIncubating);
 
+    // Free up all items in the pool
+    q_func()->drainReusableItemsPool(0);
+
     if (m_cacheMetaType)
         m_cacheMetaType->release();
 }
@@ -586,7 +589,7 @@ int QQmlDelegateModel::count() const
     return d->m_compositor.count(d->m_compositorGroup);
 }
 
-QQmlDelegateModel::ReleaseFlags QQmlDelegateModelPrivate::release(QObject *object)
+QQmlDelegateModel::ReleaseFlags QQmlDelegateModelPrivate::release(QObject *object, QQmlInstanceModel::ReusableFlag reusableFlag)
 {
     if (!object)
         return QQmlDelegateModel::ReleaseFlags(0);
@@ -597,6 +600,15 @@ QQmlDelegateModel::ReleaseFlags QQmlDelegateModelPrivate::release(QObject *objec
 
     if (!cacheItem->releaseObject())
         return QQmlDelegateModel::Referenced;
+
+    removeCacheItem(cacheItem);
+
+    if (reusableFlag == QQmlInstanceModel::Reusable) {
+        // TODO: CHECK THAT REF COUNT IS ZERO AT THIS POINT!
+        m_reusableItemsPool.insertItem(cacheItem);
+        emit q_func()->itemPooled(cacheItem->index, cacheItem->object);
+        return QQmlInstanceModel::Referenced;
+    }
 
     cacheItem->destroyObject();
     emitDestroyingItem(object);
@@ -611,11 +623,10 @@ QQmlDelegateModel::ReleaseFlags QQmlDelegateModelPrivate::release(QObject *objec
 /*
   Returns ReleaseStatus flags.
 */
-
-QQmlDelegateModel::ReleaseFlags QQmlDelegateModel::release(QObject *item, ReusableFlag)
+QQmlDelegateModel::ReleaseFlags QQmlDelegateModel::release(QObject *item, QQmlInstanceModel::ReusableFlag reusableFlag)
 {
     Q_D(QQmlDelegateModel);
-    QQmlInstanceModel::ReleaseFlags stat = d->release(item);
+    QQmlInstanceModel::ReleaseFlags stat = d->release(item, reusableFlag);
     return stat;
 }
 
@@ -920,6 +931,64 @@ void QQmlDelegateModelPrivate::releaseIncubator(QQDMIncubationTask *incubationTa
     }
 }
 
+void QQmlDelegateModel::drainReusableItemsPool(int maxPoolTime)
+{
+    d_func()->m_reusableItemsPool.drain(maxPoolTime, [=](QObject *item){ release(item, NotReusable); });
+}
+
+int QQmlDelegateModel::poolSize()
+{
+    return d_func()->m_reusableItemsPool.size();
+}
+
+void QQmlDelegateModelPrivate::reuseItem(QQmlDelegateModelItem *item, int newModelIndex, int newGroups)
+{
+    Q_ASSERT(item->object);
+
+    // Update/reset which groups the item belongs to
+    item->groups = newGroups;
+
+    // Update context property index (including row and column) on the delegate
+    // item, and inform the application about it. For a list, the row is the same
+    // as the index, and the column is always 0.
+    item->setModelIndex(newModelIndex, newModelIndex, 0);
+
+    // Notify the application that all 'dynamic'/role-based context data has
+    // changed as well (their getter function will use the updated index).
+    auto const itemAsList = QList<QQmlDelegateModelItem *>() << item;
+    auto const updateAllRoles = QVector<int>();
+    m_adaptorModel.notify(itemAsList, newModelIndex, 1, updateAllRoles);
+
+    if (QQmlDelegateModelAttached *att = static_cast<QQmlDelegateModelAttached *>(
+                qmlAttachedPropertiesObject<QQmlDelegateModel>(item->object, false))) {
+        // Update currentIndex of the attached DelegateModel object
+        // to the index the item has in the cache.
+        att->resetCurrentIndex();
+        // emitChanges will emit both group-, and index changes to the application
+        att->emitChanges();
+    }
+
+    // Inform the view that the item is recycled. This will typically result
+    // in the view updating its own attached delegate item properties.
+    emit q_func()->itemReused(newModelIndex, item->object);
+}
+
+QQmlComponent *QQmlDelegateModelPrivate::resolveDelegate(int index)
+{
+    if (!m_delegateChooser)
+        return m_delegate;
+
+    QQmlComponent *delegate = nullptr;
+    QQmlAbstractDelegateComponent *chooser = m_delegateChooser;
+
+    do {
+        delegate = chooser->delegate(&m_adaptorModel, index);
+        chooser = qobject_cast<QQmlAbstractDelegateComponent *>(delegate);
+    } while (chooser);
+
+    return delegate;
+}
+
 void QQmlDelegateModelPrivate::addCacheItem(QQmlDelegateModelItem *item, Compositor::iterator it)
 {
     m_cache.insert(it.cacheIndex, item);
@@ -1006,11 +1075,27 @@ QObject *QQmlDelegateModelPrivate::object(Compositor::Group group, int index, QQ
         return nullptr;
     }
 
+    QQmlComponent *delegate = nullptr;
     Compositor::iterator it = m_compositor.find(group, index);
 
     QQmlDelegateModelItem *cacheItem = it->inCache() ? m_cache.at(it.cacheIndex) : 0;
 
     if (!cacheItem) {
+        delegate = resolveDelegate(index);
+        if (!delegate)
+            return nullptr;
+        cacheItem = m_reusableItemsPool.takeItem(delegate);
+        if (cacheItem) {
+            // Move the pooled item back into the cache, update
+            // all related properties, and return the object (which
+            // has already been incubated, otherwise it wouldn't be in the pool).
+            addCacheItem(cacheItem, it);
+            reuseItem(cacheItem, index, it->flags);
+            cacheItem->referenceObject();
+            return cacheItem->object;
+        }
+
+        // Since we could't find an available item in the pool, we create a new one
         cacheItem = m_adaptorModel.createItem(m_cacheMetaType, it.modelIndex());
         if (!cacheItem)
             return nullptr;
@@ -1031,13 +1116,8 @@ QObject *QQmlDelegateModelPrivate::object(Compositor::Group group, int index, QQ
             cacheItem->incubationTask->forceCompletion();
         }
     } else if (!cacheItem->object) {
-        QQmlComponent *delegate = m_delegate;
-        if (m_delegateChooser) {
-            QQmlAbstractDelegateComponent *chooser = m_delegateChooser;
-            do {
-                delegate = chooser->delegate(&m_adaptorModel, index);
-                chooser = qobject_cast<QQmlAbstractDelegateComponent *>(delegate);
-            } while (chooser);
+        if (!delegate) {
+            delegate = resolveDelegate(index);
             if (!delegate)
                 return nullptr;
         }

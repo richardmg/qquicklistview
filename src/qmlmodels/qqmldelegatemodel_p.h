@@ -115,6 +115,9 @@ public:
     void setWatchedRoles(const QList<QByteArray> &roles) override;
     QQmlIncubator::Status incubationStatus(int index) override;
 
+    void drainReusableItemsPool(int maxPoolTime);
+    int poolSize();
+
     int indexOf(QObject *object, QObject *objectContext) const override;
 
     QString filterGroup() const;
@@ -136,6 +139,8 @@ Q_SIGNALS:
     void filterGroupChanged();
     void defaultGroupsChanged();
     void rootIndexChanged();
+    void itemPooled(int index, QObject *object);
+    void itemReused(int index, QObject *object);
 
 private Q_SLOTS:
     void _q_itemsChanged(int index, int count, const QVector<int> &roles);
