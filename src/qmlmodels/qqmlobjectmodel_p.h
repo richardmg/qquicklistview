@@ -71,6 +71,11 @@ class Q_QMLMODELS_PRIVATE_EXPORT QQmlInstanceModel : public QObject
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
+    enum ReusableFlag {
+        NotReusable,
+        Reusable
+    };
+
     virtual ~QQmlInstanceModel() {}
 
     enum ReleaseFlag { Referenced = 0x01, Destroyed = 0x02 };
@@ -85,6 +90,7 @@ public:
     virtual QVariant variantValue(int, const QString &) = 0;
     virtual void setWatchedRoles(const QList<QByteArray> &roles) = 0;
     virtual QQmlIncubator::Status incubationStatus(int index) = 0;
+    virtual void drainReusableItemsPool(int maxPoolTime) { Q_UNUSED(maxPoolTime); }
 
     virtual int indexOf(QObject *object, QObject *objectContext) const = 0;
     virtual const QAbstractItemModel *abstractItemModel() const { return nullptr; }
