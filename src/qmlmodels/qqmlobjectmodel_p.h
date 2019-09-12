@@ -71,6 +71,11 @@ class Q_QMLMODELS_PRIVATE_EXPORT QQmlInstanceModel : public QObject
     Q_PROPERTY(int count READ count NOTIFY countChanged)
 
 public:
+    enum ReusableFlag {
+        NotReusable,
+        Reusable
+    };
+
     virtual ~QQmlInstanceModel() {}
 
     enum ReleaseFlag { Referenced = 0x01, Destroyed = 0x02 };
