@@ -288,7 +288,7 @@ public:
 
     void requestMoreIfNecessary();
     QObject *object(Compositor::Group group, int index, QQmlIncubator::IncubationMode incubationMode);
-    QQmlDelegateModel::ReleaseFlags release(QObject *object);
+    QQmlDelegateModel::ReleaseFlags release(QObject *object, QQmlInstanceModel::ReusableFlag reusable = QQmlInstanceModel::NotReusable);
     QVariant variantValue(Compositor::Group group, int index, const QString &name);
     void emitCreatedPackage(QQDMIncubationTask *incubationTask, QQuickPackage *package);
     void emitInitPackage(QQDMIncubationTask *incubationTask, QQuickPackage *package);
@@ -300,8 +300,11 @@ public:
     void emitDestroyingItem(QObject *item) { Q_EMIT q_func()->destroyingItem(item); }
     void addCacheItem(QQmlDelegateModelItem *item, Compositor::iterator it);
     void removeCacheItem(QQmlDelegateModelItem *cacheItem);
-
     void updateFilterGroup();
+
+    void reuseItem(QQmlDelegateModelItem *item, int newModelIndex, int newGroups);
+    void insertIntoReusableItemsPool(QQmlDelegateModelItem *modelItem);
+    QQmlComponent *resolveDelegate(int index);
 
     void addGroups(Compositor::iterator from, int count, Compositor::Group group, int groupFlags);
     void removeGroups(Compositor::iterator from, int count, Compositor::Group group, int groupFlags);
@@ -347,6 +350,7 @@ public:
     QQmlDelegateModelGroupEmitterList m_pendingParts;
 
     QList<QQmlDelegateModelItem *> m_cache;
+    QQmlReuseableDelegateModelItemsPool m_reusableItemsPool;
     QList<QQDMIncubationTask *> m_finishedIncubating;
     QList<QByteArray> m_watchedRoles;
 
