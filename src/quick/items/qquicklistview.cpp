@@ -91,7 +91,7 @@ public:
 
     FxViewItem *newViewItem(int index, QQuickItem *item) override;
     void initializeViewItem(FxViewItem *item) override;
-    bool releaseItem(FxViewItem *item) override;
+    bool releaseItem(FxViewItem *item, QQmlInstanceModel::ReusableFlag reusableFlag) override;
     void repositionItemAt(FxViewItem *item, int index, qreal sizeBuffer) override;
     void repositionPackageItemAt(QQuickItem *item, int index) override;
     void resetFirstItemPosition(qreal pos = 0.0) override;
@@ -137,6 +137,8 @@ public:
     void fixup(AxisData &data, qreal minExtent, qreal maxExtent) override;
     bool flick(QQuickItemViewPrivate::AxisData &data, qreal minExtent, qreal maxExtent, qreal vSize,
                QQuickTimeLineCallback::Callback fixupCallback, qreal velocity) override;
+
+    QQuickItemViewAttached *getAttachedObject(const QObject *object) const override;
 
     QQuickListView::Orientation orient;
     qreal visiblePos;
@@ -631,15 +633,15 @@ void QQuickListViewPrivate::initializeViewItem(FxViewItem *item)
     }
 }
 
-bool QQuickListViewPrivate::releaseItem(FxViewItem *item)
+bool QQuickListViewPrivate::releaseItem(FxViewItem *item, QQmlInstanceModel::ReusableFlag reusableFlag)
 {
     if (!item || !model)
-        return QQuickItemViewPrivate::releaseItem(item);
+        return QQuickItemViewPrivate::releaseItem(item, reusableFlag);
 
     QPointer<QQuickItem> it = item->item;
     QQuickListViewAttached *att = static_cast<QQuickListViewAttached*>(item->attached);
 
-    bool released = QQuickItemViewPrivate::releaseItem(item);
+    bool released = QQuickItemViewPrivate::releaseItem(item, reusableFlag);
     if (released && it && att && att->m_sectionItem) {
         // We hold no more references to this item
         int i = 0;
@@ -679,7 +681,7 @@ bool QQuickListViewPrivate::addVisibleItems(qreal fillFrom, qreal fillTo, qreal 
         int newModelIdx = qBound(0, modelIndex + count, model->count());
         count = newModelIdx - modelIndex;
         if (count) {
-            releaseVisibleItems();
+            releaseVisibleItems(reusableFlag);
             modelIndex = newModelIdx;
             visibleIndex = modelIndex;
             visiblePos = itemEnd + count * (averageSize + spacing);
@@ -734,7 +736,7 @@ void QQuickListViewPrivate::removeItem(FxViewItem *item)
         releasePendingTransition.append(item);
     } else {
         qCDebug(lcItemViewDelegateLifecycle) << "\treleasing stationary item" << item->index << (QObject *)(item->item);
-        releaseItem(item);
+        releaseItem(item, reusableFlag);
     }
 }
 
@@ -1752,6 +1754,12 @@ bool QQuickListViewPrivate::flick(AxisData &data, qreal minExtent, qreal maxExte
         fixup(data, minExtent, maxExtent);
         return false;
     }
+}
+
+QQuickItemViewAttached *QQuickListViewPrivate::getAttachedObject(const QObject *object) const
+{
+    QObject *attachedObject =  qmlAttachedPropertiesObject<QQuickListView>(object);
+    return static_cast<QQuickItemViewAttached *>(attachedObject);
 }
 
 //----------------------------------------------------------------------------
@@ -3168,6 +3176,13 @@ void QQuickListView::keyPressEvent(QKeyEvent *event)
 void QQuickListView::geometryChanged(const QRectF &newGeometry, const QRectF &oldGeometry)
 {
     Q_D(QQuickListView);
+
+    if (d->model) {
+        // When the view changes size, we force the pool to
+        // shrink by releasing all pooled items.
+        d->model->drainReusableItemsPool(0);
+    }
+
     if (d->isRightToLeft()) {
         // maintain position relative to the right edge
         qreal dx = newGeometry.width() - oldGeometry.width();
