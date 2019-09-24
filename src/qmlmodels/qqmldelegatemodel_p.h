@@ -109,11 +109,14 @@ public:
     int count() const override;
     bool isValid() const override { return delegate() != nullptr; }
     QObject *object(int index, QQmlIncubator::IncubationMode incubationMode = QQmlIncubator::AsynchronousIfNested) override;
-    ReleaseFlags release(QObject *object) override;
+    ReleaseFlags release(QObject *object, ReusableFlag reusableFlag = NotReusable) override;
     void cancel(int index) override;
     QVariant variantValue(int index, const QString &role) override;
     void setWatchedRoles(const QList<QByteArray> &roles) override;
     QQmlIncubator::Status incubationStatus(int index) override;
+
+    void drainReusableItemsPool(int maxPoolTime) override;
+    int poolSize();
 
     int indexOf(QObject *object, QObject *objectContext) const override;
 
@@ -137,6 +140,8 @@ Q_SIGNALS:
     void defaultGroupsChanged();
     void rootIndexChanged();
     void delegateChanged();
+    void itemPooled(int index, QObject *object);
+    void itemReused(int index, QObject *object);
 
 private Q_SLOTS:
     void _q_itemsChanged(int index, int count, const QVector<int> &roles);
