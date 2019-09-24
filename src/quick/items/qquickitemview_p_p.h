@@ -174,7 +174,7 @@ public:
     void mirrorChange() override;
 
     FxViewItem *createItem(int modelIndex,QQmlIncubator::IncubationMode incubationMode = QQmlIncubator::AsynchronousIfNested);
-    virtual bool releaseItem(FxViewItem *item);
+    virtual bool releaseItem(FxViewItem *item, QQmlDelegateModel::ReusableFlag reusableFlag = QQmlDelegateModel::NotReusable);
 
     QQuickItem *createHighlightItem() const;
     QQuickItem *createComponentItem(QQmlComponent *component, qreal zValue, bool createDefault = false) const;
@@ -279,6 +279,11 @@ public:
     FxViewItem *header;
     QQmlComponent *footerComponent;
     FxViewItem *footer;
+
+    // Reusing delegates cannot be on by default for backwards compatibility.
+    // Reusing a delegate will e.g mean that Component.onCompleted will not be
+    // called, which will break legacy applications.
+    QQmlDelegateModel::ReusableFlag reusableFlag = QQmlDelegateModel::NotReusable;
 
     struct MovedItem {
         FxViewItem *item;

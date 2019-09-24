@@ -2367,7 +2367,7 @@ void QQuickItemView::destroyingItem(QObject *object)
     }
 }
 
-bool QQuickItemViewPrivate::releaseItem(FxViewItem *item)
+bool QQuickItemViewPrivate::releaseItem(FxViewItem *item, QQmlDelegateModel::ReusableFlag reusableFlag)
 {
     Q_Q(QQuickItemView);
     if (!item)
@@ -2378,7 +2378,7 @@ bool QQuickItemViewPrivate::releaseItem(FxViewItem *item)
 
     QQmlInstanceModel::ReleaseFlags flags = {};
     if (model && item->item) {
-        flags = model->release(item->item);
+        flags = model->release(item->item, reusableFlag);
         if (!flags) {
             // item was not destroyed, and we no longer reference it.
             QQuickItemPrivate::get(item->item)->setCulled(true);

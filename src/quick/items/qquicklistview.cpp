@@ -91,7 +91,7 @@ public:
 
     FxViewItem *newViewItem(int index, QQuickItem *item) override;
     void initializeViewItem(FxViewItem *item) override;
-    bool releaseItem(FxViewItem *item) override;
+    bool releaseItem(FxViewItem *item, QQmlDelegateModel::ReusableFlag reusableFlag = QQmlDelegateModel::NotReusable) override;
     void repositionItemAt(FxViewItem *item, int index, qreal sizeBuffer) override;
     void repositionPackageItemAt(QQuickItem *item, int index) override;
     void resetFirstItemPosition(qreal pos = 0.0) override;
@@ -631,15 +631,15 @@ void QQuickListViewPrivate::initializeViewItem(FxViewItem *item)
     }
 }
 
-bool QQuickListViewPrivate::releaseItem(FxViewItem *item)
+bool QQuickListViewPrivate::releaseItem(FxViewItem *item, QQmlDelegateModel::ReusableFlag reusableFlag)
 {
     if (!item || !model)
-        return QQuickItemViewPrivate::releaseItem(item);
+        return QQuickItemViewPrivate::releaseItem(item, reusableFlag);
 
     QPointer<QQuickItem> it = item->item;
     QQuickListViewAttached *att = static_cast<QQuickListViewAttached*>(item->attached);
 
-    bool released = QQuickItemViewPrivate::releaseItem(item);
+    bool released = QQuickItemViewPrivate::releaseItem(item, reusableFlag);
     if (released && it && att && att->m_sectionItem) {
         // We hold no more references to this item
         int i = 0;
@@ -734,7 +734,7 @@ void QQuickListViewPrivate::removeItem(FxViewItem *item)
         releasePendingTransition.append(item);
     } else {
         qCDebug(lcItemViewDelegateLifecycle) << "\treleasing stationary item" << item->index << (QObject *)(item->item);
-        releaseItem(item);
+        releaseItem(item, reusableFlag);
     }
 }
 
