@@ -497,6 +497,9 @@ static void qt_quickitems_defineModule(const char *uri, int major, int minor)
         QQuickPointerHandler::tr("ImageBase is an abstract base class"));
     qmlRegisterType<QQuickImage, 14>(uri, 2, 14, "Image");
     qmlRegisterType<QQuickDragHandler, 14>(uri, 2, 14, "DragHandler");
+#if QT_CONFIG(quick_listview)
+    qmlRegisterType<QQuickListView, 15>(uri, 2, 15, "ListView");
+#endif
 }
 
 static void initResources()
