@@ -390,7 +390,7 @@ public:
     int count() const override;
     bool isValid() const override;
     QObject *object(int index, QQmlIncubator::IncubationMode incubationMode = QQmlIncubator::AsynchronousIfNested) override;
-    ReleaseFlags release(QObject *item) override;
+    ReleaseFlags release(QObject *item, ReusableFlag reusable = NotReusable) override;
     QVariant variantValue(int index, const QString &role) override;
     QList<QByteArray> watchedRoles() const { return m_watchedRoles; }
     void setWatchedRoles(const QList<QByteArray> &roles) override;

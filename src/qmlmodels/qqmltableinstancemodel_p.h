@@ -106,8 +106,7 @@ public:
     const QAbstractItemModel *abstractItemModel() const override;
 
     QObject *object(int index, QQmlIncubator::IncubationMode incubationMode = QQmlIncubator::AsynchronousIfNested) override;
-    ReleaseFlags release(QObject *object) override { return release(object, NotReusable); }
-    ReleaseFlags release(QObject *object, ReusableFlag reusable);
+    ReleaseFlags release(QObject *object, ReusableFlag reusable = NotReusable) override;
     void cancel(int) override;
 
     void drainReusableItemsPool(int maxPoolTime);
