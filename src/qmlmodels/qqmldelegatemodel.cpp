@@ -612,7 +612,7 @@ QQmlDelegateModel::ReleaseFlags QQmlDelegateModelPrivate::release(QObject *objec
   Returns ReleaseStatus flags.
 */
 
-QQmlDelegateModel::ReleaseFlags QQmlDelegateModel::release(QObject *item)
+QQmlDelegateModel::ReleaseFlags QQmlDelegateModel::release(QObject *item, ReusableFlag)
 {
     Q_D(QQmlDelegateModel);
     QQmlInstanceModel::ReleaseFlags stat = d->release(item);
@@ -3335,7 +3335,7 @@ QObject *QQmlPartsModel::object(int index, QQmlIncubator::IncubationMode incubat
     return nullptr;
 }
 
-QQmlInstanceModel::ReleaseFlags QQmlPartsModel::release(QObject *item)
+QQmlInstanceModel::ReleaseFlags QQmlPartsModel::release(QObject *item, ReusableFlag)
 {
     QQmlInstanceModel::ReleaseFlags flags = nullptr;
 
