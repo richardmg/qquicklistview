@@ -129,6 +129,8 @@ class Q_QUICK_PRIVATE_EXPORT QQuickListView : public QQuickItemView
     Q_PROPERTY(HeaderPositioning headerPositioning READ headerPositioning WRITE setHeaderPositioning NOTIFY headerPositioningChanged REVISION 4)
     Q_PROPERTY(FooterPositioning footerPositioning READ footerPositioning WRITE setFooterPositioning NOTIFY footerPositioningChanged REVISION 4)
 
+    Q_PROPERTY(bool reuseItems READ reuseItems WRITE setReuseItems NOTIFY reuseItemsChanged REVISION 15)
+
     Q_CLASSINFO("DefaultProperty", "data")
 
 public:
@@ -174,6 +176,9 @@ public:
     FooterPositioning footerPositioning() const;
     void setFooterPositioning(FooterPositioning positioning);
 
+    bool reuseItems() const;
+    void setReuseItems(bool reuse);
+
     static QQuickListViewAttached *qmlAttachedProperties(QObject *);
 
 public Q_SLOTS:
@@ -190,6 +195,7 @@ Q_SIGNALS:
     void snapModeChanged();
     Q_REVISION(4) void headerPositioningChanged();
     Q_REVISION(4) void footerPositioningChanged();
+    Q_REVISION(15) void reuseItemsChanged();
 
 protected:
     void viewportMoved(Qt::Orientations orient) override;

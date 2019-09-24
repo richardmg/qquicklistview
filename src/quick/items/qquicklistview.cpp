@@ -2717,6 +2717,28 @@ void QQuickListView::setFooterPositioning(QQuickListView::FooterPositioning posi
     }
 }
 
+bool QQuickListView::reuseItems() const
+{
+    return bool(d_func()->reusableFlag == QQmlDelegateModel::Reusable);
+}
+
+void QQuickListView::setReuseItems(bool reuse)
+{
+    Q_D(QQuickListView);
+    if (reuseItems() == reuse)
+        return;
+
+    d->reusableFlag = reuse ? QQmlDelegateModel::Reusable : QQmlDelegateModel::NotReusable;
+
+//    if (!reuse && d->tableModel) {
+//        // When we're told to not reuse items, we
+//        // immediately, as documented, drain the pool.
+//        d->tableModel->drainReusableItemsPool(0);
+//    }
+
+    emit reuseItemsChanged();
+}
+
 /*!
     \qmlproperty Transition QtQuick::ListView::populate
 
